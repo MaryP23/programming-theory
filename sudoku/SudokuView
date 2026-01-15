@@ -1,0 +1,587 @@
+import javax.swing.*;
+import javax.swing.border.*;
+import java.awt.*;
+import java.awt.event.*;
+
+public class SudokuView extends JFrame {
+    private JTextField[][] cells;
+    private JButton checkButton, resetButton, newButton, solveButton;
+    private JLabel statusLabel;
+    private JMenuBar menuBar;
+    private JComboBox<String> difficultyCombo;
+    private SudokuController controller;
+
+    // Изменяем конструктор - убираем параметр controller
+    public SudokuView() {
+        initializeUI();
+    }
+    private int highlightedDigit = 0;
+    private Color highlightColor = new Color(200, 230, 255); // Голубой цвет
+    private Color conflictColor = new Color(255, 200, 200);  // Красный цвет для конфликтов
+
+    // Добавляем метод для установки контроллера после создания
+    public void setController(SudokuController controller) {
+        this.controller = controller;
+        setupControllerListeners();
+        // Инициализируем доску после установки контроллера
+        controller.initialize();
+    }
+
+    private void setupControllerListeners() {
+        if (controller == null) return;
+
+        checkButton.addActionListener(e -> controller.checkSolution());
+        resetButton.addActionListener(e -> controller.resetGame());
+        newButton.addActionListener(e -> controller.newGame());
+        solveButton.addActionListener(e -> controller.showSolution());
+        difficultyCombo.addActionListener(e -> {
+            if (controller != null) {
+                controller.changeDifficulty(difficultyCombo.getSelectedIndex());
+            }
+        });
+
+        // Добавляем обработчики для ячеек
+        for (int i = 0; i < 9; i++) {
+            for (int j = 0; j < 9; j++) {
+                final int row = i;
+                final int col = j;
+
+                cells[i][j].addKeyListener(new KeyAdapter() {
+                    @Override
+                    public void keyTyped(KeyEvent e) {
+                        char c = e.getKeyChar();
+                        if (!((c >= '1' && c <= '9') || c == KeyEvent.VK_BACK_SPACE || c == KeyEvent.VK_DELETE)) {
+                            e.consume();
+                        }
+                    }
+
+                    @Override
+                    public void keyReleased(KeyEvent e) {
+                        if (controller != null) {
+                            String text = cells[row][col].getText();
+                            if (text.isEmpty()) {
+                                controller.cellChanged(row, col, 0);
+                                // Снимаем подсветку при удалении цифры
+                                if (highlightedDigit != 0) {
+                                    highlightedDigit = 0;
+                                    clearHighlight();
+                                }
+                            } else if (text.matches("[1-9]")) {
+                                int digit = Integer.parseInt(text);
+                                controller.cellChanged(row, col, digit);
+                                // Подсвечиваем все такие же цифры
+                                highlightDigit(digit);
+                            }
+                        }
+                    }
+                });
+
+                // Обработчик клика для очистки ячейки
+                cells[i][j].addMouseListener(new MouseAdapter() {
+                    @Override
+                    public void mouseClicked(MouseEvent e) {
+                        if (SwingUtilities.isRightMouseButton(e) && controller != null) {
+                            cells[row][col].setText("");
+                            controller.cellChanged(row, col, 0);
+                            // Снимаем подсветку
+                            if (highlightedDigit != 0) {
+                                highlightedDigit = 0;
+                                clearHighlight();
+                            }
+                        } else if (SwingUtilities.isLeftMouseButton(e)) {
+                            // При клике левой кнопкой подсвечиваем цифру
+                            String text = cells[row][col].getText();
+                            if (text.matches("[1-9]")) {
+                                int digit = Integer.parseInt(text);
+                                highlightDigit(digit);
+                            } else {
+                                // Если ячейка пустая, снимаем подсветку
+                                if (highlightedDigit != 0) {
+                                    highlightedDigit = 0;
+                                    clearHighlight();
+                                }
+                            }
+                        }
+                    }
+                });
+
+                // Обработчик фокуса для подсветки при выборе ячейки
+                cells[i][j].addFocusListener(new FocusAdapter() {
+                    @Override
+                    public void focusGained(FocusEvent e) {
+                        String text = cells[row][col].getText();
+                        if (text.matches("[1-9]")) {
+                            int digit = Integer.parseInt(text);
+                            highlightDigit(digit);
+                        }
+                    }
+
+                    @Override
+                    public void focusLost(FocusEvent e) {
+                        // Можно оставить пустым или добавить логику
+                    }
+                });
+            }
+        }
+    }
+    public void highlightDigit(int digit) {
+        highlightedDigit = digit;
+
+        SwingUtilities.invokeLater(() -> {
+            // Сначала сбрасываем все подсветки
+            clearHighlight();
+
+            // Подсвечиваем все ячейки с этой цифрой
+            for (int i = 0; i < 9; i++) {
+                for (int j = 0; j < 9; j++) {
+                    String text = cells[i][j].getText();
+                    if (!text.isEmpty() && text.matches("[1-9]")) {
+                        int cellDigit = Integer.parseInt(text);
+                        if (cellDigit == digit) {
+                            // Не подсвечиваем конфликтные ячейки
+                            if (!isCellInConflict(i, j)) {
+                                cells[i][j].setBackground(highlightColor);
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // Метод для снятия подсветки
+    private void clearHighlight() {
+        for (int i = 0; i < 9; i++) {
+            for (int j = 0; j < 9; j++) {
+                if (!isCellInConflict(i, j)) {
+                    if (cells[i][j].isEditable()) {
+                        cells[i][j].setBackground(Color.WHITE);
+                    } else {
+                        cells[i][j].setBackground(new Color(240, 240, 240));
+                    }
+                }
+            }
+        }
+    }
+
+    // Проверка, находится ли ячейка в конфликте
+    private boolean isCellInConflict(int row, int col) {
+        String text = cells[row][col].getText();
+        if (text.isEmpty() || !text.matches("[1-9]")) {
+            return false;
+        }
+
+        // Проверяем конфликты в строке, столбце и квадрате
+        for (int c = 0; c < 9; c++) {
+            if (c != col && cells[row][c].getText().equals(text)) {
+                return true;
+            }
+        }
+
+        for (int r = 0; r < 9; r++) {
+            if (r != row && cells[r][col].getText().equals(text)) {
+                return true;
+            }
+        }
+
+        int startRow = (row / 3) * 3;
+        int startCol = (col / 3) * 3;
+        for (int r = startRow; r < startRow + 3; r++) {
+            for (int c = startCol; c < startCol + 3; c++) {
+                if (!(r == row && c == col) && cells[r][c].getText().equals(text)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+    private void initializeUI() {
+        setTitle("Sudoku Game");
+        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setLayout(new BorderLayout());
+
+        // Создаем панель для поля
+        JPanel boardPanel = createBoardPanel();
+        add(boardPanel, BorderLayout.CENTER);
+
+        // Создаем панель управления
+        JPanel controlPanel = createControlPanel();
+        add(controlPanel, BorderLayout.SOUTH);
+
+        // Создаем меню
+        createMenu();
+
+        // Создаем статус бар
+        statusLabel = new JLabel("Готово к игре!");
+        statusLabel.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+        add(statusLabel, BorderLayout.NORTH);
+
+        setSize(600, 650);
+        setLocationRelativeTo(null);
+        setResizable(false);
+    }
+
+    private JPanel createBoardPanel() {
+        JPanel panel = new JPanel(new GridLayout(9, 9));
+        panel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        cells = new JTextField[9][9];
+
+        Font cellFont = new Font("Arial", Font.BOLD, 20);
+
+        for (int i = 0; i < 9; i++) {
+            for (int j = 0; j < 9; j++) {
+                cells[i][j] = new JTextField();
+                cells[i][j].setHorizontalAlignment(JTextField.CENTER);
+                cells[i][j].setFont(cellFont);
+
+                // Устанавливаем границы для визуального разделения квадратов 3x3
+                Border border = createCellBorder(i, j);
+                cells[i][j].setBorder(border);
+
+                panel.add(cells[i][j]);
+            }
+        }
+
+        return panel;
+    }
+
+    private Border createCellBorder(int row, int col) {
+        int top = (row % 3 == 0) ? 2 : 1;
+        int left = (col % 3 == 0) ? 2 : 1;
+        int bottom = (row == 8) ? 2 : 1;
+        int right = (col == 8) ? 2 : 1;
+
+        return BorderFactory.createMatteBorder(top, left, bottom, right, Color.BLACK);
+    }
+
+    private JPanel createControlPanel() {
+        JPanel panel = new JPanel(new FlowLayout(FlowLayout.CENTER, 10, 10));
+
+        checkButton = new JButton("Проверить");
+        resetButton = new JButton("Сбросить");
+        newButton = new JButton("Новая игра");
+        solveButton = new JButton("Показать решение");
+
+        String[] difficulties = {"Легкий", "Средний", "Сложный"};
+        difficultyCombo = new JComboBox<>(difficulties);
+
+        // Обработчики будут установлены в setupControllerListeners()
+
+        panel.add(checkButton);
+        panel.add(resetButton);
+        panel.add(newButton);
+        panel.add(solveButton);
+        panel.add(new JLabel("Сложность:"));
+        panel.add(difficultyCombo);
+
+        return panel;
+    }
+
+    private void createMenu() {
+        menuBar = new JMenuBar();
+
+        // Меню "Игра"
+        JMenu gameMenu = new JMenu("Игра");
+
+        JMenuItem newGameItem = new JMenuItem("Новая игра");
+        JMenuItem resetItem = new JMenuItem("Сбросить игру");
+        JMenuItem checkItem = new JMenuItem("Проверить решение");
+        JMenuItem solveItem = new JMenuItem("Показать решение");
+        JMenuItem statsItem = new JMenuItem("Статистика");
+        JMenuItem exitItem = new JMenuItem("Выход");
+
+        // Добавляем обработчики
+        newGameItem.addActionListener(e -> {
+            if (controller != null) controller.newGame();
+        });
+
+        resetItem.addActionListener(e -> {
+            if (controller != null) controller.resetGame();
+        });
+
+        checkItem.addActionListener(e -> {
+            if (controller != null) controller.checkSolution();
+        });
+
+        solveItem.addActionListener(e -> {
+            if (controller != null) controller.showSolution();
+        });
+
+        statsItem.addActionListener(e -> {
+            GameSessionManager.getInstance().displayStatistics();
+        });
+
+        exitItem.addActionListener(e -> {
+            int confirm = JOptionPane.showConfirmDialog(this,
+                    "Вы уверены, что хотите выйти?", "Выход",
+                    JOptionPane.YES_NO_OPTION);
+            if (confirm == JOptionPane.YES_OPTION) {
+                System.exit(0);
+            }
+        });
+
+        // Добавляем горячие клавиши
+        newGameItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_N,
+                InputEvent.CTRL_DOWN_MASK));
+        resetItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_R,
+                InputEvent.CTRL_DOWN_MASK));
+        checkItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_C,
+                InputEvent.CTRL_DOWN_MASK));
+        exitItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_Q,
+                InputEvent.CTRL_DOWN_MASK));
+
+        // Добавляем пункты в меню "Игра"
+        gameMenu.add(newGameItem);
+        gameMenu.add(resetItem);
+        gameMenu.addSeparator();
+        gameMenu.add(checkItem);
+        gameMenu.add(solveItem);
+        gameMenu.addSeparator();
+        gameMenu.add(statsItem);
+        gameMenu.addSeparator();
+        gameMenu.add(exitItem);
+
+        // Меню "Настройки"
+        JMenu settingsMenu = new JMenu("Настройки");
+
+        JMenuItem difficultyItem = new JMenuItem("Уровень сложности...");
+        JMenuItem hintsItem = new JCheckBoxMenuItem("Показывать подсказки");
+        JMenuItem autoCheckItem = new JCheckBoxMenuItem("Автопроверка");
+        autoCheckItem.setSelected(true);
+
+        difficultyItem.addActionListener(e -> {
+            String[] options = {"Легкий", "Средний", "Сложный"};
+            int choice = JOptionPane.showOptionDialog(this,
+                    "Выберите уровень сложности:",
+                    "Уровень сложности",
+                    JOptionPane.DEFAULT_OPTION,
+                    JOptionPane.QUESTION_MESSAGE,
+                    null,
+                    options,
+                    options[0]);
+
+            if (choice >= 0 && controller != null) {
+                controller.changeDifficulty(choice);
+                difficultyCombo.setSelectedIndex(choice);
+            }
+        });
+
+        settingsMenu.add(difficultyItem);
+        settingsMenu.addSeparator();
+        settingsMenu.add(hintsItem);
+        settingsMenu.add(autoCheckItem);
+
+        // Меню "Справка"
+        JMenu helpMenu = new JMenu("Справка");
+
+        JMenuItem rulesItem = new JMenuItem("Правила игры");
+        JMenuItem tipsItem = new JMenuItem("Советы");
+        JMenuItem shortcutsItem = new JMenuItem("Горячие клавиши");
+        JMenuItem aboutItem = new JMenuItem("О программе");
+
+        rulesItem.addActionListener(e -> showRulesDialog());
+        tipsItem.addActionListener(e -> showTipsDialog());
+        aboutItem.addActionListener(e -> showAboutDialog());
+
+        shortcutsItem.addActionListener(e -> {
+            String shortcuts = "<html><div style='font-size:11pt;'>" +
+                    "<h3>Горячие клавиши:</h3>" +
+                    "<table border='0' cellspacing='5'>" +
+                    "<tr><td><b>Ctrl + N</b></td><td>Новая игра</td></tr>" +
+                    "<tr><td><b>Ctrl + R</b></td><td>Сбросить игру</td></tr>" +
+                    "<tr><td><b>Ctrl + C</b></td><td>Проверить решение</td></tr>" +
+                    "<tr><td><b>Ctrl + Q</b></td><td>Выход</td></tr>" +
+                    "<tr><td><b>1-9</b></td><td>Ввод цифры</td></tr>" +
+                    "<tr><td><b>Backspace</b></td><td>Удалить цифру</td></tr>" +
+                    "<tr><td><b>Правая кнопка мыши</b></td><td>Очистить ячейку</td></tr>" +
+                    "</table>" +
+                    "</div></html>";
+
+            JOptionPane.showMessageDialog(this, shortcuts,
+                    "Горячие клавиши", JOptionPane.INFORMATION_MESSAGE);
+        });
+
+        helpMenu.add(rulesItem);
+        helpMenu.add(tipsItem);
+        helpMenu.add(shortcutsItem);
+        helpMenu.addSeparator();
+        helpMenu.add(aboutItem);
+
+        // Добавляем все меню в панель меню
+        menuBar.add(gameMenu);
+        menuBar.add(settingsMenu);
+        menuBar.add(helpMenu);
+
+        setJMenuBar(menuBar);
+    }
+
+    public void updateCell(int row, int col, int value, boolean editable) {
+        SwingUtilities.invokeLater(() -> {
+            if (value == 0) {
+                cells[row][col].setText("");
+            } else {
+                cells[row][col].setText(String.valueOf(value));
+            }
+
+            if (editable) {
+                cells[row][col].setForeground(Color.BLUE);
+                cells[row][col].setBackground(Color.WHITE);
+                cells[row][col].setEditable(true);
+            } else {
+                cells[row][col].setForeground(Color.BLACK);
+                cells[row][col].setBackground(new Color(240, 240, 240));
+                cells[row][col].setEditable(false);
+            }
+
+            // Подсветка текущей ячейки (если есть фокус)
+            if (cells[row][col].hasFocus()) {
+                cells[row][col].setBackground(new Color(255, 255, 200));
+            }
+        });
+    }
+
+    public void updateBoard(int[][] board, boolean[][] editable) {
+        highlightedDigit = 0; // Сбрасываем подсвеченную цифру
+        for (int i = 0; i < 9; i++) {
+            for (int j = 0; j < 9; j++) {
+                updateCell(i, j, board[i][j], editable[i][j]);
+            }
+        }
+    }
+
+    public void highlightConflicts() {
+        if (controller == null) return;
+
+        SwingUtilities.invokeLater(() -> {
+            // Сначала сбрасываем все подсветки конфликтов
+            for (int i = 0; i < 9; i++) {
+                for (int j = 0; j < 9; j++) {
+                    if (cells[i][j].isEditable()) {
+                        // Проверяем, нужно ли оставить подсветку цифры
+                        if (highlightedDigit != 0) {
+                            String text = cells[i][j].getText();
+                            if (!text.isEmpty() && text.matches("[1-9]")) {
+                                int digit = Integer.parseInt(text);
+                                if (digit == highlightedDigit) {
+                                    cells[i][j].setBackground(highlightColor);
+                                    continue;
+                                }
+                            }
+                        }
+                        cells[i][j].setBackground(Color.WHITE);
+                    }
+                }
+            }
+
+            // Проверяем все ячейки на конфликты
+            for (int i = 0; i < 9; i++) {
+                for (int j = 0; j < 9; j++) {
+                    String text = cells[i][j].getText();
+                    if (!text.isEmpty() && text.matches("[1-9]")) {
+                        int value = Integer.parseInt(text);
+                        boolean hasConflict = false;
+
+                        // Проверяем строку
+                        for (int col = 0; col < 9; col++) {
+                            if (col != j && cells[i][col].getText().equals(text)) {
+                                cells[i][j].setBackground(conflictColor);
+                                cells[i][col].setBackground(conflictColor);
+                                hasConflict = true;
+                            }
+                        }
+
+                        // Проверяем столбец
+                        for (int row = 0; row < 9; row++) {
+                            if (row != i && cells[row][j].getText().equals(text)) {
+                                cells[i][j].setBackground(conflictColor);
+                                cells[row][j].setBackground(conflictColor);
+                                hasConflict = true;
+                            }
+                        }
+
+                        // Проверяем квадрат 3x3
+                        int startRow = (i / 3) * 3;
+                        int startCol = (j / 3) * 3;
+                        for (int row = startRow; row < startRow + 3; row++) {
+                            for (int col = startCol; col < startCol + 3; col++) {
+                                if (!(row == i && col == j) && cells[row][col].getText().equals(text)) {
+                                    cells[i][j].setBackground(conflictColor);
+                                    cells[row][col].setBackground(conflictColor);
+                                    hasConflict = true;
+                                }
+                            }
+                        }
+
+                        // Если нет конфликтов и это подсвеченная цифра
+                        if (!hasConflict && highlightedDigit == value) {
+                            cells[i][j].setBackground(highlightColor);
+                        }
+                    }
+                }
+            }
+        });
+    }
+    public void showMessage(String message) {
+        JOptionPane.showMessageDialog(this, message, "Sudoku", JOptionPane.INFORMATION_MESSAGE);
+    }
+    public void showError(String error) {
+        JOptionPane.showMessageDialog(this, error, "Ошибка", JOptionPane.ERROR_MESSAGE);
+    }
+    public void showWinMessage() {
+        JOptionPane.showMessageDialog(this, "Поздравляем! Вы успешно решили судоку!", "Победа!", JOptionPane.INFORMATION_MESSAGE);
+    }
+    public void setStatus(String status) {
+        statusLabel.setText(status);
+    }
+
+    private void showRulesDialog() {
+        String rules = "Правила игры Sudoku:\n\n" +
+                "1. Заполните все пустые клетки цифрами от 1 до 9\n" +
+                "2. В каждой строке все цифры должны быть разными\n" +
+                "3. В каждом столбце все цифры должны быть разными\n" +
+                "4. В каждом квадрате 3x3 все цифры должны быть разными\n\n" +
+                "Управление:\n" +
+                "• ЛКМ - выбрать ячейку\n" +
+                "• ПКМ - очистить ячейку\n" +
+                "• Цифры 1-9 - ввод числа\n" +
+                "• Backspace - удалить число";
+
+        JOptionPane.showMessageDialog(this, rules, "Правила игры", JOptionPane.INFORMATION_MESSAGE);
+    }
+    // Добавьте эти методы в класс SudokuView после метода showRulesDialog()
+
+    private void showAboutDialog() {
+        String aboutText = "<html><div style='font-size:12pt; text-align:center;'>" +
+                "<h2>Sudoku Game</h2>" +
+                "<p>Версия 1.0</p>" +
+                "<p>Разработано на Java Swing</p>" +
+                "<hr>" +
+                "<p style='text-align:left;'><b>Автор:</b> Java Developer</p>" +
+                "<p style='text-align:left;'><b>Дата:</b> 2024</p>" +
+                "<p style='text-align:left;'><b>Патерны проектирования:</b><br>" +
+                "• MVC (Model-View-Controller)<br>" +
+                "• Singleton<br>" +
+                "• Strategy</p>" +
+                "</div></html>";
+
+        JOptionPane.showMessageDialog(this, aboutText, "О программе",
+                JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    private void showTipsDialog() {
+        String tips = "<html><div style='font-size:11pt;'>" +
+                "<h3>Советы по игре в Sudoku:</h3>" +
+                "<ol>" +
+                "<li><b>Сканирование:</b> Сначала просмотрите все строки, столбцы и блоки 3x3</li>" +
+                "<li><b>Одиночные кандидаты:</b> Ищите клетки, куда можно поставить только одну цифру</li>" +
+                "<li><b>Скрытые одиночки:</b> Если цифра может быть только в одной клетке в блоке/строке/столбце</li>" +
+                "<li><b>Исключение:</b> Если цифра уже есть в строке/столбце/блоке, ее нельзя ставить там снова</li>" +
+                "<li><b>Метод карандаша:</b> Записывайте маленькие цифры-кандидаты (в уме или на бумаге)</li>" +
+                "</ol>" +
+                "</div></html>";
+
+        JOptionPane.showMessageDialog(this, tips, "Советы",
+                JOptionPane.INFORMATION_MESSAGE);
+    }
+}
