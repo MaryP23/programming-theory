@@ -1,0 +1,132 @@
+// SudokuController.java
+public class SudokuController {
+    private SudokuBoard model;
+    private SudokuView view;
+    private GameSessionManager sessionManager;
+    private GameDifficultyStrategy difficultyStrategy;
+
+    public SudokuController(SudokuBoard model, SudokuView view) {
+        this.model = model;
+        this.view = view;
+        this.sessionManager = GameSessionManager.getInstance();
+        this.difficultyStrategy = new EasyDifficulty();
+
+        // Инициализируем игру после того как view установлен
+        if (view != null) {
+            initialize();
+        }
+    }
+    public void initialize() {
+        difficultyStrategy.applyDifficulty(model);
+        updateView();
+        sessionManager.gameStarted();
+    }
+    public void checkSolution() {
+        // Сначала проверяем все ли ячейки заполнены
+        boolean allFilled = true;
+        for (int i = 0; i < 9; i++) {
+            for (int j = 0; j < 9; j++) {
+                if (model.getValue(i, j) == 0) {
+                    allFilled = false;
+                    break;
+                }
+            }
+            if (!allFilled) break;
+        }
+
+        if (!allFilled) {
+            view.showMessage("Не все ячейки заполнены!");
+            view.setStatus("Заполните все ячейки");
+            return;
+        }
+
+        if (model.isComplete()) {
+            view.showWinMessage();
+            sessionManager.gameWon();
+            view.setStatus("Поздравляем! Судоку решено правильно!");
+
+            // Отключаем редактирование после победы
+            for (int i = 0; i < 9; i++) {
+                for (int j = 0; j < 9; j++) {
+                    if (model.isEditable(i, j)) {
+                        view.updateCell(i, j, model.getValue(i, j), false);
+                    }
+                }
+            }
+        } else if (model.validateBoard()) {
+            view.showMessage("Решение пока не завершено, но ошибок нет.");
+            view.setStatus("Решение не завершено");
+        } else {
+            view.showError("Есть ошибки в решении!");
+            view.setStatus("Обнаружены ошибки");
+            checkConflicts();
+        }
+    }
+    public void resetGame() {
+        model.resetBoard();
+        updateView();
+        view.setStatus("Игра сброшена");
+    }
+    public void newGame() {
+        difficultyStrategy.applyDifficulty(model);
+        updateView();
+        view.setStatus("Новая игра начата");
+        sessionManager.gameStarted();
+    }
+    public void showSolution() {
+        model.showSolution();
+        updateView();
+        view.setStatus("Показано решение");
+    }
+    public void changeDifficulty(int difficulty) {
+        switch (difficulty) {
+            case 0: difficultyStrategy = new EasyDifficulty(); break;
+            case 1: difficultyStrategy = new MediumDifficulty(); break;
+            case 2: difficultyStrategy = new HardDifficulty(); break;
+        }
+        newGame();
+    }
+    public boolean isValidPlacement(int row, int col, int value) {
+        return model.isValidPlacement(row, col, value);
+    }
+    private void checkAutoCompletion() {
+        if (model.isComplete()) {
+            view.showWinMessage();
+            sessionManager.gameWon();
+            view.setStatus("Поздравляем! Судоку решено правильно!");
+        }
+    }
+    private void updateView() {
+        view.updateBoard(model.getBoard(), getEditableMatrix());
+    }
+    private boolean[][] getEditableMatrix() {
+        boolean[][] editable = new boolean[9][9];
+        for (int i = 0; i < 9; i++) {
+            for (int j = 0; j < 9; j++) {
+                editable[i][j] = model.isEditable(i, j);
+            }
+        }
+        return editable;
+    }
+    // В класс SudokuController добавьте метод для проверки конфликтов
+    public void checkConflicts() {
+        if (view != null) {
+            view.highlightConflicts();
+        }
+    }
+
+    // Обновите метод cellChanged для автопроверки
+    public void cellChanged(int row, int col, int value) {
+        if (model.isEditable(row, col)) {
+            model.setValue(row, col, value);
+            view.updateCell(row, col, value, true);
+            view.setStatus("Игра продолжается...");
+
+            // Автопроверка конфликтов
+            checkConflicts();
+
+            // Проверяем, завершена ли игра после каждого хода
+            checkAutoCompletion();
+        }
+    }
+}
