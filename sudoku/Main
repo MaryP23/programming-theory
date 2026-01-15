@@ -1,0 +1,45 @@
+// Main.java
+import javax.swing.*;
+
+public class Main {
+    public static void main(String[] args) {
+        // Устанавливаем Look and Feel для более современного вида
+        try {
+            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        // Запускаем приложение в потоке обработки событий Swing
+        SwingUtilities.invokeLater(() -> {
+            try {
+                // 1. Создаем модель
+                SudokuBoard model = new SudokuBoard();
+
+                // 2. Создаем представление (view)
+                SudokuView view = new SudokuView();
+
+                // 3. Создаем контроллер с моделью и представлением
+                SudokuController controller = new SudokuController(model, view);
+
+                // 4. Устанавливаем контроллер для представления
+                view.setController(controller);
+
+                // 5. Отображаем окно
+                view.setVisible(true);
+
+                // 6. Добавляем shutdown hook для показа статистики при закрытии
+                Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+                    GameSessionManager.getInstance().displayStatistics();
+                }));
+
+            } catch (Exception e) {
+                e.printStackTrace();
+                JOptionPane.showMessageDialog(null,
+                        "Ошибка при запуске приложения: " + e.getMessage(),
+                        "Ошибка",
+                        JOptionPane.ERROR_MESSAGE);
+            }
+        });
+    }
+}
