@@ -1,0 +1,193 @@
+// SudokuBoard.java
+import java.util.HashSet;
+import java.util.Set;
+
+public class SudokuBoard {
+    private int[][] board;
+    private int[][] solution;
+    private int[][] initialBoard;
+    private final int SIZE = 9;
+    private final int EMPTY = 0;
+    private boolean[][] editable;
+
+    public SudokuBoard() {
+        board = new int[SIZE][SIZE];
+        solution = new int[SIZE][SIZE];
+        initialBoard = new int[SIZE][SIZE];
+        editable = new boolean[SIZE][SIZE];
+        generateNewPuzzle();
+    }
+
+    public void generateNewPuzzle() {
+        clearBoard();
+        solveBoard(0, 0);
+
+        // Сохраняем решение
+        for (int i = 0; i < SIZE; i++) {
+            System.arraycopy(board[i], 0, solution[i], 0, SIZE);
+        }
+
+        // Сохраняем начальную доску
+        for (int i = 0; i < SIZE; i++) {
+            System.arraycopy(board[i], 0, initialBoard[i], 0, SIZE);
+        }
+
+        // Удаляем числа для создания головоломки
+        removeNumbers(40);
+
+        // Отмечаем редактируемые ячейки
+        for (int i = 0; i < SIZE; i++) {
+            for (int j = 0; j < SIZE; j++) {
+                editable[i][j] = (board[i][j] == EMPTY);
+            }
+        }
+    }
+
+    private void clearBoard() {
+        for (int i = 0; i < SIZE; i++) {
+            for (int j = 0; j < SIZE; j++) {
+                board[i][j] = EMPTY;
+            }
+        }
+    }
+
+    private boolean solveBoard(int row, int col) {
+        if (row == SIZE - 1 && col == SIZE) return true;
+        if (col == SIZE) { row++; col = 0; }
+        if (board[row][col] != EMPTY) return solveBoard(row, col + 1);
+
+        int[] nums = {1,2,3,4,5,6,7,8,9};
+        shuffleArray(nums);
+
+        for (int num : nums) {
+            if (isValidPlacement(row, col, num)) {
+                board[row][col] = num;
+                if (solveBoard(row, col + 1)) return true;
+                board[row][col] = EMPTY;
+            }
+        }
+        return false;
+    }
+
+    private void shuffleArray(int[] array) {
+        for (int i = array.length - 1; i > 0; i--) {
+            int index = (int) (Math.random() * (i + 1));
+            int temp = array[index];
+            array[index] = array[i];
+            array[i] = temp;
+        }
+    }
+
+    private void removeNumbers(int count) {
+        int removed = 0;
+        while (removed < count) {
+            int row = (int) (Math.random() * SIZE);
+            int col = (int) (Math.random() * SIZE);
+
+            if (board[row][col] != EMPTY) {
+                board[row][col] = EMPTY;
+                removed++;
+            }
+        }
+    }
+
+    public boolean isValidPlacement(int row, int col, int num) {
+        // Проверка строки
+        for (int x = 0; x < SIZE; x++) {
+            if (board[row][x] == num) return false;
+        }
+
+        // Проверка столбца
+        for (int x = 0; x < SIZE; x++) {
+            if (board[x][col] == num) return false;
+        }
+
+        // Проверка квадрата 3x3
+        int startRow = row - row % 3;
+        int startCol = col - col % 3;
+        for (int i = 0; i < 3; i++) {
+            for (int j = 0; j < 3; j++) {
+                if (board[i + startRow][j + startCol] == num) return false;
+            }
+        }
+        return true;
+    }
+
+    public void setValue(int row, int col, int value) {
+        if (editable[row][col]) {
+            board[row][col] = value;
+        }
+    }
+
+    public int getValue(int row, int col) {
+        return board[row][col];
+    }
+
+    public int getSolution(int row, int col) {
+        return solution[row][col];
+    }
+
+    public boolean isEditable(int row, int col) {
+        return editable[row][col];
+    }
+
+    public boolean isComplete() {
+        for (int i = 0; i < SIZE; i++) {
+            for (int j = 0; j < SIZE; j++) {
+                if (board[i][j] == EMPTY) return false;
+            }
+        }
+        return validateBoard();
+    }
+
+    public boolean validateBoard() {
+        // Проверка строк
+        for (int i = 0; i < SIZE; i++) {
+            Set<Integer> rowSet = new HashSet<>();
+            for (int j = 0; j < SIZE; j++) {
+                if (board[i][j] != EMPTY && !rowSet.add(board[i][j])) return false;
+            }
+        }
+
+        // Проверка столбцов
+        for (int j = 0; j < SIZE; j++) {
+            Set<Integer> colSet = new HashSet<>();
+            for (int i = 0; i < SIZE; i++) {
+                if (board[i][j] != EMPTY && !colSet.add(board[i][j])) return false;
+            }
+        }
+
+        // Проверка квадратов 3x3
+        for (int block = 0; block < SIZE; block++) {
+            Set<Integer> blockSet = new HashSet<>();
+            int rowStart = (block / 3) * 3;
+            int colStart = (block % 3) * 3;
+            for (int i = rowStart; i < rowStart + 3; i++) {
+                for (int j = colStart; j < colStart + 3; j++) {
+                    if (board[i][j] != EMPTY && !blockSet.add(board[i][j])) return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    public void resetBoard() {
+        for (int i = 0; i < SIZE; i++) {
+            for (int j = 0; j < SIZE; j++) {
+                if (editable[i][j]) {
+                    board[i][j] = EMPTY;
+                }
+            }
+        }
+    }
+
+    public void showSolution() {
+        for (int i = 0; i < SIZE; i++) {
+            System.arraycopy(solution[i], 0, board[i], 0, SIZE);
+        }
+    }
+
+    public int[][] getBoard() {
+        return board;
+    }
+}
