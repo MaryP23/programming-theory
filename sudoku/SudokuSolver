@@ -1,0 +1,82 @@
+// SudokuSolver.java - Демонстрация решения судоку
+import javax.swing.*;
+import java.awt.*;
+
+public class SudokuSolver extends JFrame {
+    private SudokuBoard board;
+    private JTextArea solutionArea;
+
+    public SudokuSolver() {
+        setTitle("Sudoku Solver");
+        setLayout(new BorderLayout());
+
+        board = new SudokuBoard();
+
+        JPanel buttonPanel = new JPanel();
+        JButton solveButton = new JButton("Решить");
+        JButton generateButton = new JButton("Сгенерировать");
+
+        solveButton.addActionListener(e -> solvePuzzle());
+        generateButton.addActionListener(e -> generatePuzzle());
+
+        buttonPanel.add(solveButton);
+        buttonPanel.add(generateButton);
+
+        solutionArea = new JTextArea(11, 25);
+        solutionArea.setFont(new Font("Monospaced", Font.BOLD, 16));
+        solutionArea.setEditable(false);
+
+        add(buttonPanel, BorderLayout.NORTH);
+        add(new JScrollPane(solutionArea), BorderLayout.CENTER);
+
+        setSize(400, 500);
+        setLocationRelativeTo(null);
+        generatePuzzle();
+    }
+
+    private void generatePuzzle() {
+        board.generateNewPuzzle();
+        displayPuzzle();
+    }
+
+    private void solvePuzzle() {
+        board.showSolution();
+        displayPuzzle();
+    }
+
+    private void displayPuzzle() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("   A B C   D E F   G H I\n");
+        sb.append("  ╔═══════╦═══════╦═══════╗\n");
+
+        int[][] puzzle = board.getBoard();
+        for (int i = 0; i < 9; i++) {
+            sb.append(i + 1).append(" ║ ");
+            for (int j = 0; j < 9; j++) {
+                if (puzzle[i][j] == 0) {
+                    sb.append("· ");
+                } else {
+                    sb.append(puzzle[i][j]).append(" ");
+                }
+
+                if ((j + 1) % 3 == 0 && j < 8) {
+                    sb.append("║ ");
+                }
+            }
+            sb.append("║\n");
+
+            if ((i + 1) % 3 == 0 && i < 8) {
+                sb.append("  ╠═══════╬═══════╬═══════╣\n");
+            }
+        }
+        sb.append("  ╚═══════╩═══════╩═══════╝");
+
+        solutionArea.setText(sb.toString());
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> {
+            new SudokuSolver().setVisible(true);
+        });
+    }
+}
